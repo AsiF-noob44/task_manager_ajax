@@ -3,6 +3,7 @@ let tasks = [];
 let nextTaskId = 1;
 let editingTaskId = null; // Track which task is being edited
 let originalTaskTitle = ""; // Store original title for cancel functionality
+let savingTaskId = null; // Track which task is currently being saved
 
 function showLoading(show) {
   const loadingIndicator = document.getElementById("loading");
@@ -162,7 +163,10 @@ function saveEdit(id) {
     return;
   }
 
+  // Set saving state
+  savingTaskId = id;
   showLoading(true);
+  renderTasks(); // Re-render to show saving state
 
   const updatedTask = {
     userId: 1,
@@ -191,12 +195,15 @@ function saveEdit(id) {
       }
       editingTaskId = null;
       originalTaskTitle = "";
+      savingTaskId = null; // Clear saving state
       renderTasks();
       showStatus("Task updated successfully!", "success");
     })
     .catch((error) => {
       console.error("Error updating task:", error);
       showStatus("Error updating task.", "error");
+      savingTaskId = null; // Clear saving state on error too
+      renderTasks(); // Re-render to restore normal buttons
     })
     .finally(() => {
       showLoading(false);
@@ -204,16 +211,26 @@ function saveEdit(id) {
 }
 
 function cancelEdit() {
+  // Check if currently saving - if so, don't allow cancel
+  if (editingTaskId !== null && savingTaskId === editingTaskId) {
+    // Currently saving, show a message instead of canceling
+    showStatus("Please wait while the task is being saved...", "error");
+    return;
+  }
+
   editingTaskId = null;
   originalTaskTitle = "";
   renderTasks();
 }
 
 function handleEditKeydown(event, id) {
-  if (event.key === "Enter") {
+  // Check if currently saving
+  const isSaving = savingTaskId === id;
+
+  if (event.key === "Enter" && !isSaving) {
     event.preventDefault();
     saveEdit(id);
-  } else if (event.key === "Escape") {
+  } else if (event.key === "Escape" && !isSaving) {
     event.preventDefault();
     cancelEdit();
   }
@@ -271,20 +288,39 @@ function renderTasks() {
       const isEditing = editingTaskId === task.id;
 
       if (isEditing) {
+        const isSaving = savingTaskId === task.id;
+        const saveButtonText = isSaving ? "Saving..." : "Save";
+        const saveButtonClass = isSaving
+          ? "bg-gray-400 text-white cursor-not-allowed"
+          : "bg-green-500 hover:bg-green-600 cursor-pointer text-white";
+        const cancelButtonClass = isSaving
+          ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+          : "bg-gray-500 hover:bg-gray-600 cursor-pointer text-white";
+        const saveButtonDisabled = isSaving ? "disabled" : "";
+        const cancelButtonDisabled = isSaving ? "disabled" : "";
+
         return `<div class="flex items-center justify-between bg-blue-50 p-4 rounded-lg shadow-sm border-2 border-blue-300">
                   <div class="flex items-center gap-4 flex-grow min-w-0">
                       <input type="checkbox"
                           class="h-5 w-5 bg-white accent-blue-600 focus:outline-none focus:ring-blue-500 border-gray-300 rounded flex-shrink-0" disabled>
-                      <input type="text" id="edit-input-${task.id}" value="${task.title}"
+                      <input type="text" id="edit-input-${task.id}" value="${
+          task.title
+        }"
                           class="flex-grow border border-blue-300 p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
                           placeholder="Enter task title..."
-                          onkeydown="handleEditKeydown(event, ${task.id})">
+                          onkeydown="handleEditKeydown(event, ${task.id})" ${
+          isSaving ? "readonly" : ""
+        }>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0 ml-4">
-                      <button onclick="saveEdit(${task.id})"
-                          class="bg-green-500 font-semibold tracking-wide text-white px-3 py-2 rounded-lg hover:bg-green-600 cursor-pointer h-10 flex items-center">Save</button>
-                      <button onclick="cancelEdit()"
-                          class="bg-gray-500 font-semibold tracking-wide text-white px-3 py-2 rounded-lg hover:bg-gray-600 cursor-pointer h-10 flex items-center">Cancel</button>
+                      <button id="save-btn-${task.id}" onclick="${
+          isSaving ? "" : `saveEdit(${task.id})`
+        }" ${saveButtonDisabled}
+                          class="${saveButtonClass} font-semibold tracking-wide px-3 py-2 rounded-lg h-10 flex items-center justify-center min-w-[80px]">${saveButtonText}</button>
+                      <button id="cancel-btn-${task.id}" onclick="${
+          isSaving ? "" : "cancelEdit()"
+        }" ${cancelButtonDisabled}
+                          class="${cancelButtonClass} font-semibold tracking-wide px-3 py-2 rounded-lg h-10 flex items-center justify-center min-w-[80px]">Cancel</button>
                   </div>
               </div>`;
       } else {
